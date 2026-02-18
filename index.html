@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>AstroPro 3D · Mobile Edition</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --accent: #2563eb;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --sun: #d97706; --moon: #475569; --mercury: #7c3aed;
+            --venus: #db2777; --mars: #dc2626; --jupiter: #92400e; --saturn: #334155;
+        }
+
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; padding: 10px;
+            touch-action: manipulation; /* Prevents accidental zooming while dragging */
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .chart-wrapper {
+            width: 100%;
+            aspect-ratio: 1/1;
+            background: white;
+            border-radius: 50%;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            border: 1px solid var(--border);
+            touch-action: none; /* Critical for mobile scrubbing */
+        }
+
+        svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+        /* Graphics */
+        .house-sector { fill: #fff; stroke: #f1f5f9; stroke-width: 1; }
+        .tick-line { stroke: #cbd5e1; }
+        .tick-major { stroke: #94a3b8; stroke-width: 1.5; }
+        .zodiac-text { font-size: 16px; fill: #64748b; font-weight: 500; pointer-events: none; }
+        .house-num { font-size: 10px; fill: #94a3b8; font-weight: 800; pointer-events: none; }
+        .chart-planet { font-size: 26px; cursor: move; text-anchor: middle; dominant-baseline: middle; }
+        .degree-label { font-size: 10px; fill: var(--text); font-weight: 700; pointer-events: none; }
+
+        /* Planet Bank - Optimized for Thumbs */
+        .bank {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .planet-btn {
+            aspect-ratio: 1/1;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; cursor: grab; background: white; border-radius: 12px;
+            border: 1px solid var(--border); box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            transition: 0.2s;
+        }
+
+        .planet-btn.placed { opacity: 0.2; filter: grayscale(1); pointer-events: none; }
+
+        .ui-btn {
+            width: 100%; padding: 14px; border-radius: 12px; border: none;
+            background: #fee2e2; color: #dc2626; font-weight: 700; font-size: 14px;
+        }
+
+        .c-sun{fill:var(--sun)} .c-moon{fill:var(--moon)} .c-mercury{fill:var(--mercury)}
+        .c-venus{fill:var(--venus)} .c-mars{fill:var(--mars)} .c-jupiter{fill:var(--jupiter)}
+        .c-saturn{fill:var(--saturn)}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="chart-wrapper" id="dropzone">
+        <svg id="chart" viewBox="0 0 400 400">
+            <g id="ticks-layer"></g>
+            <g id="houses-layer"></g>
+            <g id="zodiac-layer"></g>
+            <g id="planets-layer"></g>
+        </svg>
+    </div>
+
+    <div class="bank">
+        <button class="planet-btn c-sun" draggable="true" data-id="sun">☉</button>
+        <button class="planet-btn c-moon" draggable="true" data-id="moon">☽</button>
+        <button class="planet-btn c-mercury" draggable="true" data-id="mercury">☿</button>
+        <button class="planet-btn c-venus" draggable="true" data-id="venus">♀</button>
+        <button class="planet-btn c-mars" draggable="true" data-id="mars">♂</button>
+        <button class="planet-btn c-jupiter" draggable="true" data-id="jupiter">♃</button>
+        <button class="planet-btn c-saturn" draggable="true" data-id="saturn">♄</button>
+    </div>
+
+    <button class="ui-btn" id="resetBtn">Clear Chart</button>
+</div>
+
+<script>
+(() => {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const center = 200, innerR = 115, outerR = 185, midR = 150, ascOffset = 90;
+    const chartState = new Map();
+    let draggedId = null;
+
+    function init() {
+        const symbols = ["♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓"];
+        const ticksG = document.getElementById("ticks-layer");
+        const housesG = document.getElementById("houses-layer");
+        const zodiacG = document.getElementById("zodiac-layer");
+
+        for(let d=0; d<360; d++) {
+            const angle = (d - ascOffset) * Math.PI / 180;
+            const line = document.createElementNS(svgNS, "line");
+            const isMajor = d % 30 === 0;
+            const len = isMajor ? 12 : 6;
+            line.setAttribute("x1", center + outerR * Math.cos(angle));
+            line.setAttribute("y1", center + outerR * Math.sin(angle));
+            line.setAttribute("x2", center + (outerR - len) * Math.cos(angle));
+            line.setAttribute("y2", center + (outerR - len) * Math.sin(angle));
+            line.setAttribute("class", isMajor ? "tick-major" : "tick-line");
+            ticksG.appendChild(line);
+        }
+
+        for(let i=0; i<12; i++) {
+            const startDeg = i * 30;
+            const sA = (startDeg - ascOffset) * Math.PI / 180;
+            const eA = (startDeg + 30 - ascOffset) * Math.PI / 180;
+            const midA = (startDeg + 15 - ascOffset) * Math.PI / 180;
+
+            const path = document.createElementNS(svgNS, "path");
+            path.setAttribute("d", `M ${center+outerR*Math.cos(sA)} ${center+outerR*Math.sin(sA)} A ${outerR} ${outerR} 0 0 1 ${center+outerR*Math.cos(eA)} ${center+outerR*Math.sin(eA)} L ${center+innerR*Math.cos(eA)} ${center+innerR*Math.sin(eA)} A ${innerR} ${innerR} 0 0 0 ${center+innerR*Math.cos(sA)} ${center+innerR*Math.sin(sA)} Z`);
+            path.setAttribute("class", "house-sector");
+            path.setAttribute("data-index", i);
+            housesG.appendChild(path);
+
+            addText(symbols[i], outerR + 22, midA, "zodiac-text", zodiacG);
+            addText(i + 1, innerR + 15, midA, "house-num", housesG);
+        }
+    }
+
+    function addText(v, r, a, c, g) {
+        const t = document.createElementNS(svgNS, "text");
+        t.textContent = v; t.setAttribute("x", center + r * Math.cos(a));
+        t.setAttribute("y", center + r * Math.sin(a));
+        t.setAttribute("class", c); t.setAttribute("text-anchor", "middle");
+        t.setAttribute("dominant-baseline", "middle"); g.appendChild(t);
+    }
+
+    function render() {
+        const layer = document.getElementById("planets-layer");
+        layer.innerHTML = "";
+        document.querySelectorAll(".planet-btn").forEach(b => b.classList.toggle("placed", chartState.has(b.dataset.id)));
+
+        chartState.forEach((data, id) => {
+            const totalDeg = (data.house * 30) + data.degree;
+            const angle = (totalDeg - ascOffset) * Math.PI / 180;
+            const g = document.createElementNS(svgNS, "g");
+
+            const pTxt = document.createElementNS(svgNS, "text");
+            pTxt.textContent = getSymbol(id);
+            pTxt.setAttribute("x", center + midR * Math.cos(angle));
+            pTxt.setAttribute("y", center + midR * Math.sin(angle));
+            pTxt.setAttribute("class", `chart-planet c-${id}`);
+
+            const dTxt = document.createElementNS(svgNS, "text");
+            dTxt.textContent = `${Math.floor(data.degree)}°`;
+            dTxt.setAttribute("x", center + (midR + 22) * Math.cos(angle));
+            dTxt.setAttribute("y", center + (midR + 22) * Math.sin(angle));
+            dTxt.setAttribute("class", "degree-label");
+
+            // Scrubbing for both Mouse and Touch
+            const startScrub = (e) => {
+                e.preventDefault();
+                const isTouch = e.type.includes('touch');
+                let startX = isTouch ? e.touches[0].clientX : e.clientX;
+                let startDeg = data.degree;
+
+                const onMove = (mE) => {
+                    const currentX = isTouch ? mE.touches[0].clientX : mE.clientX;
+                    data.degree = Math.max(0, Math.min(29, startDeg + ((currentX - startX) / 4)));
+                    render();
+                };
+                const onUp = () => {
+                    window.removeEventListener(isTouch ? 'touchmove' : 'mousemove', onMove);
+                    window.removeEventListener(isTouch ? 'touchend' : 'mouseup', onUp);
+                };
+                window.addEventListener(isTouch ? 'touchmove' : 'mousemove', onMove);
+                window.addEventListener(isTouch ? 'touchend' : 'mouseup', onUp);
+            };
+
+            pTxt.addEventListener('mousedown', startScrub);
+            pTxt.addEventListener('touchstart', startScrub);
+            pTxt.onclick = (e) => { if(e.detail === 2) { chartState.delete(id); render(); }};
+
+            g.appendChild(pTxt); g.appendChild(dTxt); layer.appendChild(g);
+        });
+    }
+
+    function getSymbol(id) { return {sun:"☉", moon:"☽", mercury:"☿", venus:"♀", mars:"♂", jupiter:"♃", saturn:"♄"}[id]; }
+
+    // Improved Drag & Drop for Mobile
+    document.querySelectorAll(".planet-btn").forEach(btn => {
+        btn.onmousedown = btn.ontouchstart = (e) => draggedId = btn.dataset.id;
+        btn.ondragstart = (e) => e.dataTransfer.setData("text", btn.dataset.id);
+    });
+
+    const dropzone = document.getElementById("dropzone");
+    dropzone.ondragover = (e) => e.preventDefault();
+    dropzone.ondrop = (e) => {
+        const id = e.dataTransfer.getData("text");
+        const rect = dropzone.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        // Simple house detection based on angle from center
+        const angle = Math.atan2(y - rect.height/2, x - rect.width/2) * 180 / Math.PI + ascOffset;
+        const house = Math.floor(((angle + 360) % 360) / 30);
+        if(id) { chartState.set(id, {house, degree: 15}); render(); }
+    };
+
+    document.getElementById("resetBtn").onclick = () => { chartState.clear(); render(); };
+    init();
+})();
+</script>
+</body>
+</html>
