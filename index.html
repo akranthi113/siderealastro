@@ -66,7 +66,6 @@ body {
   touch-action: pan-y;
 }
 
-/* ── Header ── */
 .header {
   text-align: center;
   padding: 0 10px;
@@ -87,7 +86,6 @@ body {
   opacity: 0.7;
 }
 
-/* ── ASC Selector (Compact Dropdown) ── */
 .asc-bar {
   display: flex;
   align-items: center;
@@ -125,7 +123,6 @@ body {
   border-color: var(--accent);
 }
 
-/* ── Chart ── */
 .chart-wrap {
   width: 100%;
   aspect-ratio: 1;
@@ -183,7 +180,6 @@ body {
   box-shadow: 0 0 0 3px rgba(184, 50, 50, 0.15);
 }
 
-/* ── Tooltip ── */
 #tip {
   position: fixed;
   z-index: 9999;
@@ -204,7 +200,6 @@ body {
 }
 #tip.show { opacity: 1; }
 
-/* ── Bank ── */
 .bank-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -265,7 +260,6 @@ body {
 }
 #ghost.show { opacity: 0.9; }
 
-/* ── Clear button ── */
 .clear-btn {
   width: 100%;
   padding: 14px;
@@ -314,7 +308,6 @@ body {
     <p>Select ASC · Drag planets · Drop near left edge for ASC</p>
   </div>
 
-  <!-- Compact ASC Selector -->
   <div class="asc-bar">
     <span class="asc-label">ASC</span>
     <select class="asc-select" id="ascSelect">
@@ -576,8 +569,10 @@ function render() {
       startDrag('chart', pid, e.clientX, e.clientY);
     });
     
+    // Touch events for planets - attached directly to element
     pt.addEventListener('touchstart', e => {
       if (e.touches.length !== 1) return;
+      e.preventDefault(); // Prevent scroll immediately for planets
       handlePlanetTouchStart(e, pid);
     }, { passive: false });
 
@@ -725,6 +720,7 @@ function cancelDrag() {
   render();
 }
 
+// Mouse events for bank cards
 document.querySelectorAll('.pcard').forEach(card => {
   card.setAttribute('draggable', 'true');
   card.addEventListener('mousedown', e => {
@@ -765,16 +761,18 @@ chartWrap.addEventListener('drop', e => {
   render();
 });
 
+// Touch handling for planets on chart
 function handlePlanetTouchStart(e, pid) {
   const t = e.touches[0];
   drag.touchId = t.identifier;
   drag.touchStartPos = { x: t.clientX, y: t.clientY };
   drag.hasMoved = false;
   
+  // Check for double tap
   const now = Date.now();
   const prev = drag.lastTap.get(pid) || 0;
   if (now - prev < 300) {
-    e.preventDefault();
+    // Double tap - remove planet
     if (ascPlanet === pid) ascPlanet = null;
     chartData.delete(pid);
     drag.lastTap.delete(pid);
@@ -783,87 +781,125 @@ function handlePlanetTouchStart(e, pid) {
   }
   drag.lastTap.set(pid, now);
   
-  drag.potentialPid = pid;
-  drag.potentialSrc = 'chart';
+  // Start drag immediately for planets
+  startDrag('chart', pid, t.clientX, t.clientY);
 }
 
-document.addEventListener('touchstart', onTS, { passive: true });
-document.addEventListener('touchmove',  onTM, { passive: false });
-document.addEventListener('touchend',   onTE, { passive: false });
-document.addEventListener('touchcancel',onTC, { passive: false });
-
-function getTouch(list, id) {
-  for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
-  return null;
-}
-
-function onTS(e) {
-  const t = e.touches[0];
+// Global touch handlers for ongoing drag
+function onTouchMove(e) {
+  if (!drag.active) return;
+  
+  const t = findTouch(e.touches, drag.touchId) || findTouch(e.changedTouches, drag.touchId);
   if (!t) return;
   
-  const target = document.elementFromPoint(t.clientX, t.clientY);
-  if (!target) return;
-  
-  const card = target.closest('.pcard');
-  if (card && !card.classList.contains('used')) {
-    drag.touchId = t.identifier;
-    drag.touchStartPos = { x: t.clientX, y: t.clientY };
-    drag.hasMoved = false;
-    drag.potentialPid = card.dataset.pid;
-    drag.potentialSrc = 'bank';
-    return;
-  }
+  e.preventDefault();
+  moveDragTo(t.clientX, t.clientY);
 }
 
-function onTM(e) {
-  if (!drag.touchId) return;
+function onTouchEnd(e) {
+  if (!drag.active) return;
   
-  const t = getTouch(e.changedTouches, drag.touchId) || getTouch(e.touches, drag.touchId);
+  const t = findTouch(e.changedTouches, drag.touchId);
   if (!t) return;
   
-  const dx = t.clientX - drag.touchStartPos.x;
-  const dy = t.clientY - drag.touchStartPos.y;
-  const dist = Math.sqrt(dx*dx + dy*dy);
-  
-  if (!drag.active && dist > 10) {
-    drag.hasMoved = true;
-    if (drag.potentialPid) {
-      e.preventDefault();
-      startDrag(drag.potentialSrc, drag.potentialPid, drag.touchStartPos.x, drag.touchStartPos.y);
-      moveDragTo(t.clientX, t.clientY);
-    }
-  } else if (drag.active) {
-    e.preventDefault();
-    moveDragTo(t.clientX, t.clientY);
-  }
-}
-
-function onTE(e) {
-  if (!drag.touchId) return;
-  
-  const t = getTouch(e.changedTouches, drag.touchId);
-  if (!t) return;
-  
-  if (drag.active) {
-    e.preventDefault();
-    endDrag(t.clientX, t.clientY);
-  }
-  
+  e.preventDefault();
+  endDrag(t.clientX, t.clientY);
   drag.touchId = null;
-  drag.potentialPid = null;
-  drag.potentialSrc = null;
-  drag.hasMoved = false;
 }
 
-function onTC(e) {
+function onTouchCancel(e) {
   if (drag.active) {
     cancelDrag();
   }
   drag.touchId = null;
-  drag.potentialPid = null;
-  drag.potentialSrc = null;
-  drag.hasMoved = false;
 }
+
+function findTouch(list, id) {
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].identifier === id) return list[i];
+  }
+  return null;
+}
+
+// Attach global touch handlers
+document.addEventListener('touchmove', onTouchMove, { passive: false });
+document.addEventListener('touchend', onTouchEnd, { passive: false });
+document.addEventListener('touchcancel', onTouchCancel, { passive: false });
+
+// Touch handling for bank cards - using direct attachment with delegation fallback
+function initBankTouch() {
+  const bank = document.getElementById('bank');
+  
+  bank.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const card = t.target.closest('.pcard');
+    
+    if (card && !card.classList.contains('used')) {
+      e.preventDefault(); // Prevent scroll on bank cards
+      drag.touchId = t.identifier;
+      drag.touchStartPos = { x: t.clientX, y: t.clientY };
+      drag.hasMoved = false;
+      drag.potentialPid = card.dataset.pid;
+      drag.potentialSrc = 'bank';
+    }
+  }, { passive: false });
+  
+  bank.addEventListener('touchmove', e => {
+    if (!drag.touchId || drag.active) return;
+    
+    const t = findTouch(e.touches, drag.touchId) || findTouch(e.changedTouches, drag.touchId);
+    if (!t) return;
+    
+    const dx = t.clientX - drag.touchStartPos.x;
+    const dy = t.clientY - drag.touchStartPos.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    // Start drag after moving 10px
+    if (dist > 10 && drag.potentialPid) {
+      e.preventDefault();
+      startDrag('bank', drag.potentialPid, drag.touchStartPos.x, drag.touchStartPos.y);
+      moveDragTo(t.clientX, t.clientY);
+    }
+  }, { passive: false });
+  
+  bank.addEventListener('touchend', e => {
+    if (!drag.touchId) return;
+    
+    const t = findTouch(e.changedTouches, drag.touchId);
+    if (!t) {
+      drag.touchId = null;
+      drag.potentialPid = null;
+      return;
+    }
+    
+    // If we didn't start dragging, it was just a tap - ignore
+    if (!drag.active && drag.potentialPid) {
+      drag.touchId = null;
+      drag.potentialPid = null;
+      drag.hasMoved = false;
+    }
+  }, { passive: false });
+}
+
+// Chart touch handling for new drops (when not dragging a planet)
+chartWrap.addEventListener('touchstart', e => {
+  // Only handle if we're not already dragging and not touching a planet
+  if (drag.active || e.touches.length !== 1) return;
+  
+  const t = e.touches[0];
+  const target = document.elementFromPoint(t.clientX, t.clientY);
+  
+  // Check if touching a planet glyph
+  let node = target;
+  while (node && node !== chartWrap) {
+    if (node.classList && node.classList.contains('p-glyph')) {
+      // Planet touch is handled by the element's own listener
+      return;
+    }
+    node = node.parentNode;
+  }
+}, { passive: true });
 
 // ASC Dropdown
 document.getElementById('ascSelect').addEventListener('change', (e) => {
@@ -878,6 +914,8 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   render();
 });
 
+// Initialize
+initBankTouch();
 buildChart();
 render();
 
