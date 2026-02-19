@@ -1,703 +1,804 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Astro Chart Builder</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Inter:wght@400;500;600&display=swap');
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>AstroPro · Chart Builder</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap');
 
-:root {
-  --bg:        #f7f4ef;
-  --white:     #ffffff;
-  --border:    #e0d8cc;
-  --text:      #1a1510;
-  --muted:     #7a6f62;
-  --accent:    #5c4a2a;
-  --red:       #b83232;
+        :root {
+            --bg: #f5f0eb;
+            --surface: #ffffff;
+            --border: #ddd5c8;
+            --border-mid: #c8bdb0;
+            --text: #2c2416;
+            --text-dim: #8a7a68;
+            --accent: #7c5c2e;
+            --accent2: #c0392b;
+            --sun: #c47a0a;
+            --moon: #4a6d9a;
+            --mercury: #6b2fae;
+            --venus: #b01050;
+            --mars: #b52020;
+            --jupiter: #985200;
+            --saturn: #246b5e;
+            --chart-bg: #fffef8;
+            --chart-sector: #faf6f0;
+            --chart-sector-alt: #f5ede4;
+            --chart-line: #d4c9bc;
+            --chart-line-major: #a89882;
+            --zodiac-fill: #a89882;
+            --house-num-fill: #c8b8a8;
+        }
 
-  --sun:     #c47a0a;
-  --moon:    #3d6494;
-  --mercury: #6b2fae;
-  --venus:   #a01248;
-  --mars:    #b02020;
-  --jupiter: #8a4a00;
-  --saturn:  #1e6b5a;
+        /* ── Reset & Base ── */
+        *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-  --chart-face: #fffef8;
-  --ring-even:  #faf5ed;
-  --ring-odd:   #f3ece0;
-  --spoke:      #ccc0b0;
-  --tick:       #b8a898;
-  --sign-color: #9a8878;
-}
+        html {
+            /* Prevent elastic/rubber-band scroll while dragging */
+            overscroll-behavior: none;
+        }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Crimson Pro', Georgia, serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px 12px 40px;
+            /* Do NOT put touch-action:manipulation on body — it breaks planet scrubbing */
+            background-image:
+                radial-gradient(ellipse at 30% 10%, rgba(180,140,80,0.07) 0%, transparent 55%),
+                radial-gradient(ellipse at 70% 90%, rgba(120,80,180,0.04) 0%, transparent 55%);
+            user-select: none;
+            -webkit-user-select: none;
+        }
 
-/* Allow normal page scroll but let JS steal touches when needed */
-html { overscroll-behavior: none; }
-body {
-  margin: 0; padding: 18px 12px 36px;
-  background: var(--bg);
-  font-family: 'Inter', system-ui, sans-serif;
-  display: flex; flex-direction: column; align-items: center;
-  min-height: 100vh;
-  /* pan-y: page can scroll vertically when NOT dragging a planet */
-  touch-action: pan-y;
-}
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.28em;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin: 0 0 14px;
+        }
 
-.app {
-  width: 100%; max-width: 420px;
-  display: flex; flex-direction: column; gap: 16px;
-  touch-action: pan-y;
-}
+        .container {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
 
-.header { text-align: center; padding: 0 10px; }
-.header h1 {
-  font-family: 'Cinzel', serif; font-size: 14px; font-weight: 600;
-  letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase;
-  margin: 0 0 4px;
-}
-.header p { font-size: 11px; color: var(--muted); margin: 0; opacity: 0.7; }
+        /* ── Chart ── */
+        .chart-wrapper {
+            width: 100%;
+            aspect-ratio: 1/1;
+            position: relative;
+            /* Critically: block ALL touch actions on the chart so the browser
+               never tries to scroll while user is dragging over it */
+            touch-action: none;
+            border-radius: 50%;
+            background: var(--chart-bg);
+            box-shadow:
+                0 0 0 1px var(--border),
+                0 4px 24px rgba(100,70,30,0.12),
+                inset 0 0 40px rgba(200,180,150,0.08);
+            transition: box-shadow 0.2s;
+        }
 
-/* ASC Selector */
-.asc-bar {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 12px; background: var(--white);
-  border: 1px solid var(--border); border-radius: 10px;
-  touch-action: manipulation;
-}
-.asc-label {
-  font-family: 'Cinzel', serif; font-size: 10px;
-  letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase;
-}
-.asc-select {
-  font-family: 'Cinzel', serif; font-size: 13px; color: var(--red);
-  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-  padding: 6px 24px 6px 10px; cursor: pointer; outline: none; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center; min-height: 36px;
-  touch-action: manipulation;
-}
+        .chart-wrapper.drag-over {
+            box-shadow:
+                0 0 0 2.5px var(--accent),
+                0 4px 32px rgba(124,92,46,0.22),
+                inset 0 0 40px rgba(200,180,150,0.08);
+        }
 
-/* Chart */
-.chart-wrap {
-  width: 100%; aspect-ratio: 1; position: relative;
-  /* CRITICAL: touch-action:none so the browser NEVER scrolls while finger is
-     on the chart — we own every touch here */
-  touch-action: none;
-}
+        svg { width: 100%; height: 100%; display: block; overflow: visible; }
 
-#chart-svg {
-  width: 100%; height: 100%; display: block;
-  border-radius: 50%; border: 1.5px solid var(--border);
-  background: var(--chart-face); transition: border-color 0.2s;
-}
-.chart-wrap.over #chart-svg { border-color: var(--accent); background: #fefcf4; }
+        .house-sector     { fill: var(--chart-sector);     stroke: var(--chart-line); stroke-width: 0.7; }
+        .house-sector-alt { fill: var(--chart-sector-alt); stroke: var(--chart-line); stroke-width: 0.7; }
+        .tick-line        { stroke: var(--chart-line);       stroke-width: 0.7; }
+        .tick-major       { stroke: var(--chart-line-major); stroke-width: 1.4; }
 
-/* SVG classes */
-.tick-minor { stroke: var(--tick); stroke-width: 0.6; }
-.tick-major { stroke: var(--spoke); stroke-width: 1.2; }
-.sign-sym   { font-size: 13px; fill: var(--sign-color); font-family: 'Cinzel', serif; cursor: default; }
-.house-n    { font-size: 8px; fill: #bbb0a0; font-family: 'Inter', sans-serif; font-weight: 600; }
-.asc-line   { stroke: var(--red); stroke-width: 2; stroke-linecap: round; }
-.asc-lbl    { font-size: 9px; fill: var(--red); font-family: 'Cinzel', serif; font-weight: 600; }
-.inner-ring { fill: var(--chart-face); stroke: var(--spoke); stroke-width: 1; }
+        .zodiac-text {
+            font-size: 15px;
+            fill: var(--zodiac-fill);
+            font-family: 'Cinzel', serif;
+            pointer-events: all;
+            cursor: default;
+            transition: fill 0.15s;
+        }
+        .zodiac-text:hover { fill: var(--accent); }
 
-.p-glyph {
-  font-size: 20px; text-anchor: middle; dominant-baseline: middle;
-  cursor: grab; pointer-events: all;
-}
-.p-deg {
-  font-size: 8px; fill: var(--muted); font-family: 'Inter', sans-serif;
-  pointer-events: none; text-anchor: middle; dominant-baseline: middle;
-}
+        .house-num {
+            font-size: 9px;
+            fill: var(--house-num-fill);
+            font-weight: 800;
+            font-family: 'Cinzel', serif;
+            pointer-events: none;
+        }
 
-/* Tooltip */
-#tip {
-  position: fixed; z-index: 9999; pointer-events: none;
-  background: var(--white); border: 1px solid var(--border); color: var(--text);
-  font-family: 'Cinzel', serif; font-size: 10.5px; letter-spacing: 0.06em;
-  padding: 4px 10px; border-radius: 6px; white-space: nowrap;
-  opacity: 0; transition: opacity 0.12s; top: -99px; left: -99px;
-}
-#tip.show { opacity: 1; }
+        .degree-label {
+            font-size: 9px;
+            fill: var(--text-dim);
+            font-weight: 400;
+            pointer-events: none;
+            font-family: 'Crimson Pro', serif;
+        }
 
-/* Planet bank */
-.bank-row {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 7px;
-  padding: 10px; background: var(--white);
-  border: 1px solid var(--border); border-radius: 14px;
-  /* touch-action:none — we handle all touches on the cards ourselves */
-  touch-action: none;
-}
+        .chart-planet {
+            font-size: 22px;
+            cursor: move;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            transition: font-size 0.12s;
+        }
+        .chart-planet:hover { font-size: 27px; }
 
-.pcard {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; aspect-ratio: 1; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--bg);
-  /* none — we fully own touches */
-  touch-action: none;
-  cursor: grab; gap: 2px; min-width: 40px; min-height: 40px;
-  transition: opacity 0.18s, transform 0.1s;
-}
-.pcard span.sym { font-size: 19px; line-height: 1; display: block; pointer-events: none; }
-.pcard span.lbl {
-  font-family: 'Cinzel', serif; font-size: 5px; letter-spacing: 0.04em;
-  color: var(--muted); text-transform: uppercase; line-height: 1; pointer-events: none;
-}
-.pcard.used    { opacity: 0.2; filter: grayscale(1); pointer-events: none; }
-.pcard.lifting { opacity: 0.35; transform: scale(0.88); }
+        .asc-label {
+            font-size: 9px;
+            fill: var(--accent2);
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            pointer-events: none;
+        }
 
-/* Floating ghost that follows finger/cursor */
-#ghost {
-  position: fixed; pointer-events: none; z-index: 9000;
-  font-size: 36px; line-height: 1;
-  /* offset so glyph is above the finger tip */
-  transform: translate(-50%, -70%);
-  opacity: 0; transition: opacity 0.08s;
-}
-#ghost.show { opacity: 0.9; }
+        /* ── Tooltip ── */
+        #tooltip {
+            position: fixed;
+            pointer-events: none;
+            z-index: 10000;
+            background: var(--surface);
+            border: 1px solid var(--border-mid);
+            color: var(--text);
+            font-family: 'Cinzel', serif;
+            font-size: 11px;
+            letter-spacing: 0.07em;
+            padding: 5px 11px 4px;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(100,70,30,0.14);
+            white-space: nowrap;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 0.14s, transform 0.14s;
+            left: -9999px; /* keep offscreen when hidden so it doesn't affect layout */
+        }
+        #tooltip.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
 
-/* Clear button */
-.clear-btn {
-  width: 100%; padding: 14px; border: 1px solid #f0d0d0; background: #fff8f8;
-  color: var(--red); font-family: 'Cinzel', serif; font-size: 11px;
-  letter-spacing: 0.12em; font-weight: 600; border-radius: 10px;
-  cursor: pointer; touch-action: manipulation; min-height: 44px;
-  transition: background 0.15s;
-}
-.clear-btn:active { background: #fdecea; }
+        /* ── Planet Bank ── */
+        .bank-label {
+            font-family: 'Cinzel', serif;
+            font-size: 10px;
+            letter-spacing: 0.2em;
+            color: var(--text-dim);
+            text-align: center;
+            text-transform: uppercase;
+        }
 
-/* Colour tokens */
-.c-sun     { color: var(--sun);     fill: var(--sun); }
-.c-moon    { color: var(--moon);    fill: var(--moon); }
-.c-mercury { color: var(--mercury); fill: var(--mercury); }
-.c-venus   { color: var(--venus);   fill: var(--venus); }
-.c-mars    { color: var(--mars);    fill: var(--mars); }
-.c-jupiter { color: var(--jupiter); fill: var(--jupiter); }
-.c-saturn  { color: var(--saturn);  fill: var(--saturn); }
-</style>
+        .bank {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 10px rgba(100,70,30,0.06);
+            /* Bank itself should not scroll - use auto for normal page scroll above/below */
+            touch-action: pan-y;
+        }
+
+        .planet-btn {
+            aspect-ratio: 1/1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            font-size: 20px;
+            line-height: 1;
+            cursor: grab;
+            background: var(--bg);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 4px rgba(100,70,30,0.07);
+            transition: transform 0.15s, opacity 0.2s, box-shadow 0.2s, background 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
+            /* Prevent the long-press magnifier / context menu on iOS */
+            -webkit-touch-callout: none;
+            touch-action: none; /* Each button blocks touch so we handle it ourselves */
+        }
+
+        .planet-btn .pname {
+            font-family: 'Cinzel', serif;
+            font-size: 5.5px;
+            letter-spacing: 0.03em;
+            color: var(--text-dim);
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        .planet-btn:hover     { transform: scale(1.09); box-shadow: 0 4px 12px rgba(100,70,30,0.14); }
+        .planet-btn.dragging  { opacity: 0.35; transform: scale(0.94); }
+        .planet-btn.placed    { opacity: 0.18; filter: grayscale(1); pointer-events: none; }
+
+        /* Ghost element that follows the finger */
+        #touch-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            font-size: 40px;
+            line-height: 1;
+            transform: translate(-50%, -60%); /* slightly above finger tip */
+            opacity: 0.9;
+            filter: drop-shadow(0 3px 8px rgba(0,0,0,0.18));
+            display: none;
+        }
+
+        .hint {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-dim);
+            font-style: italic;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .ui-btn {
+            width: 100%;
+            padding: 13px;
+            border-radius: 12px;
+            border: 1px solid #e8c8c8;
+            background: #fff5f5;
+            color: #c0392b;
+            font-weight: 700;
+            font-size: 12px;
+            font-family: 'Cinzel', serif;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            touch-action: manipulation; /* tap only, no scroll confusion */
+        }
+        .ui-btn:hover { background: #fdecea; box-shadow: 0 4px 16px rgba(192,57,43,0.10); }
+
+        .c-sun     { fill: var(--sun);     color: var(--sun); }
+        .c-moon    { fill: var(--moon);    color: var(--moon); }
+        .c-mercury { fill: var(--mercury); color: var(--mercury); }
+        .c-venus   { fill: var(--venus);   color: var(--venus); }
+        .c-mars    { fill: var(--mars);    color: var(--mars); }
+        .c-jupiter { fill: var(--jupiter); color: var(--jupiter); }
+        .c-saturn  { fill: var(--saturn);  color: var(--saturn); }
+    </style>
 </head>
 <body>
 
-<div id="ghost"></div>
-<div id="tip"></div>
+<!-- Persistent ghost div — moved by JS, never recreated -->
+<div id="touch-ghost"></div>
+<div id="tooltip"></div>
 
-<div class="app">
-  <div class="header">
-    <h1>Astro Chart</h1>
-    <p>Drag planets onto the wheel · drag placed planets to move · double-tap to remove</p>
-  </div>
+<div class="container">
+    <h1>✦ Astro Chart Builder</h1>
 
-  <div class="asc-bar">
-    <span class="asc-label">ASC Sign</span>
-    <select class="asc-select" id="ascSelect">
-      <option value="0">♈ Aries</option>
-      <option value="1">♉ Taurus</option>
-      <option value="2">♊ Gemini</option>
-      <option value="3">♋ Cancer</option>
-      <option value="4">♌ Leo</option>
-      <option value="5">♍ Virgo</option>
-      <option value="6">♎ Libra</option>
-      <option value="7">♏ Scorpio</option>
-      <option value="8">♐ Sagittarius</option>
-      <option value="9">♑ Capricorn</option>
-      <option value="10">♒ Aquarius</option>
-      <option value="11">♓ Pisces</option>
-    </select>
-  </div>
+    <div class="chart-wrapper" id="dropzone">
+        <svg id="chart" viewBox="0 0 400 400">
+            <defs>
+                <radialGradient id="chartGrad" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%"   stop-color="#fffef8"/>
+                    <stop offset="100%" stop-color="#f4ece0"/>
+                </radialGradient>
+            </defs>
+            <circle cx="200" cy="200" r="196" fill="url(#chartGrad)" stroke="#ddd5c8" stroke-width="1"/>
+            <circle cx="200" cy="200" r="115" fill="#faf8f3"          stroke="#ddd5c8" stroke-width="0.8"/>
+            <g id="ticks-layer"></g>
+            <g id="houses-layer"></g>
+            <g id="zodiac-layer"></g>
+            <g id="planets-layer"></g>
+        </svg>
+    </div>
 
-  <div class="chart-wrap" id="chartWrap">
-    <svg id="chart-svg" viewBox="0 0 400 400">
-      <g id="g-sectors"></g>
-      <g id="g-ticks"></g>
-      <g id="g-signs"></g>
-      <g id="g-asc"></g>
-      <g id="g-planets"></g>
-    </svg>
-  </div>
+    <p class="hint">Drag planets onto the chart · Hover/tap to see names<br>Slide left/right on a placed planet to adjust degree · Double-tap to remove</p>
 
-  <div class="bank-row" id="bank">
-    <div class="pcard c-sun"     data-pid="sun">     <span class="sym">☉</span><span class="lbl">Sun</span></div>
-    <div class="pcard c-moon"    data-pid="moon">    <span class="sym">☽</span><span class="lbl">Moon</span></div>
-    <div class="pcard c-mercury" data-pid="mercury"> <span class="sym">☿</span><span class="lbl">Merc</span></div>
-    <div class="pcard c-venus"   data-pid="venus">   <span class="sym">♀</span><span class="lbl">Venus</span></div>
-    <div class="pcard c-mars"    data-pid="mars">    <span class="sym">♂</span><span class="lbl">Mars</span></div>
-    <div class="pcard c-jupiter" data-pid="jupiter"> <span class="sym">♃</span><span class="lbl">Jup</span></div>
-    <div class="pcard c-saturn"  data-pid="saturn">  <span class="sym">♄</span><span class="lbl">Saturn</span></div>
-  </div>
+    <div class="bank-label">Planets</div>
+    <div class="bank" id="bank">
+        <button class="planet-btn c-sun"     data-id="sun">☉<span class="pname">Sun</span></button>
+        <button class="planet-btn c-moon"    data-id="moon">☽<span class="pname">Moon</span></button>
+        <button class="planet-btn c-mercury" data-id="mercury">☿<span class="pname">Mercury</span></button>
+        <button class="planet-btn c-venus"   data-id="venus">♀<span class="pname">Venus</span></button>
+        <button class="planet-btn c-mars"    data-id="mars">♂<span class="pname">Mars</span></button>
+        <button class="planet-btn c-jupiter" data-id="jupiter">♃<span class="pname">Jupiter</span></button>
+        <button class="planet-btn c-saturn"  data-id="saturn">♄<span class="pname">Saturn</span></button>
+    </div>
 
-  <button class="clear-btn" id="clearBtn">✕  Clear Chart</button>
+    <button class="ui-btn" id="resetBtn">✕ Clear Chart</button>
 </div>
 
 <script>
-(function () {
-'use strict';
+/* =============================================================================
+   AstroPro Chart Builder — fully fixed mobile touch handling
+   Key design decisions:
+   1. ONE global touchmove + touchend listener — never use passive:true when we
+      need to call preventDefault() to stop scroll.
+   2. A persistent #touch-ghost div avoids repeated DOM create/destroy.
+   3. Planet-bank buttons use touch-action:none so the browser won't preemptively
+      claim the touch for scrolling before we get a chance to handle it.
+   4. Chart wrapper uses touch-action:none to fully own its touch surface.
+   5. Scrub state is stored in a module-level object, not closure vars, so it
+      survives re-renders triggered during the same gesture.
+   ========================================================================== */
+(() => {
+    'use strict';
 
-/* ═══════════════════════════════════════════════════════════════
-   DESIGN NOTES — why the touch system is built this way:
+    const svgNS        = "http://www.w3.org/2000/svg";
+    const CENTER       = 200;
+    const INNER_R      = 115;
+    const OUTER_R      = 185;
+    const MID_R        = 148;
+    const ASC_OFFSET   = 90;
+    const VIEWBOX_SIZE = 400;
 
-   Problem with the previous version:
-   • onTS was passive:true  →  preventDefault() silently ignored
-     → browser scrolled the page the moment a finger moved
-   • Drag only started after >10px movement with a threshold check,
-     but by then the browser already "won" the scroll gesture
-   • Two separate touchstart handlers (global onTS + per-element
-     handlePlanetTouchStart) fought each other
+    // ── Data ──────────────────────────────────────────────────────────────────
+    const chartState = new Map(); // planetId → { house:0-11, degree:0-29.9 }
 
-   Solution:
-   • ONE touchstart listener, capture phase, passive:false
-     so we can call preventDefault() the instant we recognise
-     a drag on a planet card or placed planet
-   • ONE touchmove listener, passive:false, always calls
-     preventDefault() once a drag is active
-   • ONE touchend/cancel listener
-   • No movement threshold — drag starts immediately on touchstart
-     for instant response. Double-tap is detected by timestamp.
-   • chart-wrap has touch-action:none (browser never scrolls over it)
-   • bank-row has touch-action:none (browser never scrolls over it)
-   • body has touch-action:pan-y (normal scroll elsewhere)
-═══════════════════════════════════════════════════════════════ */
+    const SYMBOLS      = { sun:"☉", moon:"☽", mercury:"☿", venus:"♀", mars:"♂", jupiter:"♃", saturn:"♄" };
+    const PLANET_NAMES = { sun:"Sun", moon:"Moon", mercury:"Mercury", venus:"Venus", mars:"Mars", jupiter:"Jupiter", saturn:"Saturn" };
+    const ZODIAC_SYM   = ["♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓"];
+    const ZODIAC_NAMES = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
 
-const NS = 'http://www.w3.org/2000/svg';
-const CX = 200, CY = 200;
-const R_OUT        = 183;
-const R_ZOD        = 162;
-const R_ZOD_MID    = 173;
-const R_IN         = 140;
-const R_PLANET     = 110;   // outermost planet orbit radius
-const R_INNER_FACE = 60;
-const ASC_SCREEN   = 180;   // chart 0° sits at screen left (180° in math angle)
+    // ── Global gesture state ──────────────────────────────────────────────────
+    // Only ONE gesture can be active at a time.
+    // mode: null | 'drag-from-bank' | 'scrub'
+    const gesture = {
+        mode:      null,
+        planetId:  null,   // id of planet being dragged or scrubbed
+        startX:    0,
+        startDeg:  0,
+        moved:     false,  // did finger move enough to count as drag vs tap?
+    };
 
-let ASC_SIGN_INDEX = 0;
+    const ghost    = document.getElementById("touch-ghost");
+    const dropzone = document.getElementById("dropzone");
 
-const SIGNS = ['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];
-const SIGN_NAMES = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo',
-                    'Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
-const PLANETS = {
-  sun:     { sym:'☉', name:'Sun' },
-  moon:    { sym:'☽', name:'Moon' },
-  mercury: { sym:'☿', name:'Mercury' },
-  venus:   { sym:'♀', name:'Venus' },
-  mars:    { sym:'♂', name:'Mars' },
-  jupiter: { sym:'♃', name:'Jupiter' },
-  saturn:  { sym:'♄', name:'Saturn' },
-};
+    // ── Tooltip ───────────────────────────────────────────────────────────────
+    const tipEl = document.getElementById("tooltip");
+    let   tipTO = null;
 
-// chartData: planetId → chart degrees (0–360, where 0 = ASC cusp)
-const chartData = new Map();
-
-/* ── SVG helpers ─────────────────────────────── */
-function mkEl(tag, attrs, parent) {
-  const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
-  if (parent) parent.appendChild(e);
-  return e;
-}
-
-// chart degrees → screen radians
-function cDegToRad(deg) {
-  return ((deg + ASC_SCREEN) % 360) * Math.PI / 180;
-}
-
-function polar(r, rad) {
-  return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
-}
-
-/* ── Coordinate conversion ───────────────────── */
-// screen clientX/Y → chart degrees (0–360)
-function clientToChartDeg(cx, cy) {
-  const wrap = document.getElementById('chartWrap');
-  const rect = wrap.getBoundingClientRect();
-  // map client → SVG viewBox (400×400)
-  const vx = (cx - rect.left) / rect.width  * 400;
-  const vy = (cy - rect.top)  / rect.height * 400;
-  const rad = Math.atan2(vy - CY, vx - CX);
-  const screenDeg = ((rad * 180 / Math.PI) + 360) % 360;
-  return ((screenDeg - ASC_SCREEN) + 360) % 360;
-}
-
-// Is client position inside the circular chart area?
-function overChart(cx, cy) {
-  const wrap = document.getElementById('chartWrap');
-  const rect = wrap.getBoundingClientRect();
-  const dx = cx - (rect.left + rect.width / 2);
-  const dy = cy - (rect.top  + rect.height / 2);
-  return dx*dx + dy*dy <= (rect.width/2) * (rect.height/2);
-}
-
-/* ── Build static chart ───────────────────────── */
-function buildChart() {
-  ['g-sectors','g-ticks','g-signs','g-asc'].forEach(id =>
-    document.getElementById(id).innerHTML = '');
-
-  const gS = document.getElementById('g-sectors');
-  const gT = document.getElementById('g-ticks');
-  const gSg = document.getElementById('g-signs');
-  const gA  = document.getElementById('g-asc');
-
-  // Outer background disc
-  mkEl('circle', { cx:CX, cy:CY, r:R_OUT, fill:'#fffef8', stroke:'var(--spoke)', 'stroke-width':1 }, gS);
-
-  // 12 house/sign sectors
-  for (let i = 0; i < 12; i++) {
-    const a1   = cDegToRad(i * 30);
-    const a2   = cDegToRad((i + 1) * 30);
-    const midA = cDegToRad(i * 30 + 15);
-
-    // Zodiac band arc
-    const zp1 = polar(R_ZOD, a1), zp2 = polar(R_ZOD, a2);
-    const ip1 = polar(R_IN,  a1), ip2 = polar(R_IN,  a2);
-    mkEl('path', {
-      d: `M${zp1.x},${zp1.y} A${R_ZOD},${R_ZOD} 0 0,1 ${zp2.x},${zp2.y}` +
-         `L${ip2.x},${ip2.y} A${R_IN},${R_IN} 0 0,0 ${ip1.x},${ip1.y}Z`,
-      fill: i%2===0 ? 'var(--ring-even)' : 'var(--ring-odd)',
-      stroke: 'var(--spoke)', 'stroke-width': '0.5'
-    }, gS);
-
-    // House wedge (inner area)
-    mkEl('path', {
-      d: `M${CX},${CY} L${ip1.x},${ip1.y} A${R_IN},${R_IN} 0 0,1 ${ip2.x},${ip2.y}Z`,
-      fill: 'none', stroke: 'var(--spoke)', 'stroke-width': '0.4'
-    }, gS);
-
-    // House number — rotates with ASC
-    const hNum = ((i - ASC_SIGN_INDEX + 12) % 12) + 1;
-    const hnPos = polar(R_IN - 18, midA);
-    const ht = mkEl('text', { x: hnPos.x, y: hnPos.y, class: 'house-n',
-      'text-anchor':'middle', 'dominant-baseline':'middle' }, gS);
-    ht.textContent = hNum;
-
-    // Zodiac sign symbol — rotates with ASC
-    const signIdx = (ASC_SIGN_INDEX + i) % 12;
-    const smPos = polar(R_ZOD_MID - 4, midA);
-    const st = mkEl('text', { x: smPos.x, y: smPos.y, class: 'sign-sym',
-      'text-anchor':'middle', 'dominant-baseline':'middle' }, gSg);
-    st.textContent = SIGNS[signIdx];
-    bindSignTip(st, signIdx);
-  }
-
-  // Degree ticks
-  for (let d = 0; d < 360; d++) {
-    const a   = cDegToRad(d);
-    const maj = d % 30 === 0;
-    const mid = d % 5  === 0;
-    const len = maj ? 11 : mid ? 6 : 3.5;
-    const p1 = polar(R_OUT, a), p2 = polar(R_OUT - len, a);
-    mkEl('line', { x1:p1.x, y1:p1.y, x2:p2.x, y2:p2.y,
-      class: maj ? 'tick-major' : 'tick-minor' }, gT);
-  }
-
-  // Inner centre circle
-  mkEl('circle', { cx:CX, cy:CY, r:R_INNER_FACE, class:'inner-ring' }, gS);
-
-  // ASC line
-  const ascRad = cDegToRad(0);
-  const al1 = polar(R_INNER_FACE, ascRad), al2 = polar(R_OUT + 5, ascRad);
-  mkEl('line', { x1:al1.x, y1:al1.y, x2:al2.x, y2:al2.y, class:'asc-line' }, gA);
-  const alp = polar(R_OUT + 14, ascRad);
-  const at = mkEl('text', { x:alp.x, y:alp.y, class:'asc-lbl',
-    'text-anchor':'middle', 'dominant-baseline':'middle' }, gA);
-  at.textContent = 'ASC';
-}
-
-/* ── Render placed planets ───────────────────── */
-function render() {
-  const g = document.getElementById('g-planets');
-  g.innerHTML = '';
-
-  // Sync bank card states
-  document.querySelectorAll('.pcard').forEach(card => {
-    const pid = card.dataset.pid;
-    card.classList.toggle('used',    chartData.has(pid));
-    card.classList.toggle('lifting', drag.active && drag.pid === pid && drag.src === 'bank');
-  });
-
-  // Stack planets that land close together
-  const buckets = new Map();
-  chartData.forEach((deg, pid) => {
-    const key = Math.round(deg / 4) * 4;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(pid);
-  });
-
-  chartData.forEach((deg, pid) => {
-    const key = Math.round(deg / 4) * 4;
-    const grp = buckets.get(key);
-    const idx = grp.indexOf(pid);
-    const r   = R_PLANET - idx * 22;    // push stacked planets inward
-    const rad = cDegToRad(deg);
-    const pos = polar(r, rad);
-    const degInSign = Math.floor(deg % 30);
-
-    // Glyph
-    const pt = mkEl('text', {
-      x: pos.x, y: pos.y,
-      class: `p-glyph c-${pid}`,
-      'data-pid': pid,
-      'text-anchor': 'middle',
-      'dominant-baseline': 'middle'
-    }, g);
-    pt.textContent = PLANETS[pid].sym;
-
-    // Degree label (toward centre)
-    const dp = polar(r - 15, rad);
-    const dt = mkEl('text', { x:dp.x, y:dp.y, class:'p-deg' }, g);
-    dt.textContent = `${degInSign}°`;
-
-    // Mouse tooltip + drag
-    pt.addEventListener('mouseenter', e => showTip(planetTip(pid, deg), e.clientX, e.clientY));
-    pt.addEventListener('mousemove',  e => moveTip(e.clientX, e.clientY));
-    pt.addEventListener('mouseleave', hideTip);
-    pt.addEventListener('mousedown',  e => { e.preventDefault(); beginDrag('chart', pid, e.clientX, e.clientY); });
-    pt.addEventListener('dblclick',   () => { chartData.delete(pid); render(); });
-  });
-}
-
-function planetTip(pid, deg) {
-  return `${PLANETS[pid].name}  ·  ${SIGN_NAMES[Math.floor(deg/30)]}  ${Math.floor(deg%30)}°`;
-}
-
-/* ── Tooltip ─────────────────────────────────── */
-const tipEl = document.getElementById('tip');
-let tipTO = null;
-function showTip(txt, cx, cy) {
-  clearTimeout(tipTO);
-  tipEl.textContent = txt;
-  tipEl.classList.add('show');
-  moveTip(cx, cy);
-}
-function moveTip(cx, cy) {
-  tipEl.style.left = '-999px'; tipEl.style.top = '-999px';
-  const tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
-  let tx = cx + 12, ty = cy - th - 8;
-  if (tx + tw > window.innerWidth - 6) tx = cx - tw - 12;
-  if (ty < 4) ty = cy + 14;
-  tipEl.style.left = tx + 'px'; tipEl.style.top = ty + 'px';
-}
-function hideTip() { tipTO = setTimeout(() => tipEl.classList.remove('show'), 80); }
-function bindSignTip(el, idx) {
-  el.addEventListener('mouseenter', e => showTip(SIGN_NAMES[idx], e.clientX, e.clientY));
-  el.addEventListener('mousemove',  e => moveTip(e.clientX, e.clientY));
-  el.addEventListener('mouseleave', hideTip);
-}
-
-/* ── Ghost ───────────────────────────────────── */
-const ghostEl = document.getElementById('ghost');
-function showGhost(sym, cx, cy) {
-  ghostEl.textContent = sym;
-  ghostEl.style.left = cx + 'px';
-  ghostEl.style.top  = cy + 'px';
-  ghostEl.classList.add('show');
-}
-function moveGhost(cx, cy) {
-  ghostEl.style.left = cx + 'px';
-  ghostEl.style.top  = cy + 'px';
-}
-function hideGhost() { ghostEl.classList.remove('show'); }
-
-/* ══════════════════════════════════════════════
-   DRAG STATE
-   src: 'bank' | 'chart'
-   We keep one clean object and reset it fully
-   after every gesture.
-══════════════════════════════════════════════ */
-const drag = {
-  active:  false,
-  src:     null,     // 'bank' | 'chart'
-  pid:     null,     // planet id
-  touchId: null,     // active touch identifier
-  lastTap: new Map() // pid → Date.now() for double-tap
-};
-
-function resetDrag() {
-  drag.active  = false;
-  drag.src     = null;
-  drag.pid     = null;
-  drag.touchId = null;
-}
-
-function beginDrag(src, pid, cx, cy) {
-  drag.active = true;
-  drag.src    = src;
-  drag.pid    = pid;
-  hideTip();
-  showGhost(PLANETS[pid].sym, cx, cy);
-  if (src === 'chart') {
-    // Remove from chart immediately — ghost replaces it visually
-    chartData.delete(pid);
-  }
-  render(); // update bank (grey out source card)
-}
-
-function updateDrag(cx, cy) {
-  moveGhost(cx, cy);
-  document.getElementById('chartWrap').classList.toggle('over', overChart(cx, cy));
-}
-
-function commitDrag(cx, cy) {
-  if (!drag.active) return;
-  hideGhost();
-  document.getElementById('chartWrap').classList.remove('over');
-
-  if (overChart(cx, cy)) {
-    chartData.set(drag.pid, clientToChartDeg(cx, cy));
-  }
-  // If dropped outside chart and src was 'chart', planet is simply removed
-  // (already deleted in beginDrag). If src was 'bank', nothing placed — fine.
-
-  resetDrag();
-  render();
-}
-
-function abortDrag() {
-  if (!drag.active) return;
-  hideGhost();
-  document.getElementById('chartWrap').classList.remove('over');
-  // Note: if we dragged from chart, the planet was deleted in beginDrag.
-  // On abort we just leave it removed (simpler, avoids needing to save original pos).
-  resetDrag();
-  render();
-}
-
-/* ══════════════════════════════════════════════
-   MOUSE EVENTS (desktop)
-══════════════════════════════════════════════ */
-document.querySelectorAll('.pcard').forEach(card => {
-  card.setAttribute('draggable', 'true');
-  card.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', card.dataset.pid));
-  card.addEventListener('mousedown', e => {
-    if (card.classList.contains('used')) return;
-    e.preventDefault();
-    beginDrag('bank', card.dataset.pid, e.clientX, e.clientY);
-  });
-});
-
-window.addEventListener('mousemove', e => { if (drag.active) updateDrag(e.clientX, e.clientY); });
-window.addEventListener('mouseup',   e => { if (drag.active) commitDrag(e.clientX, e.clientY); });
-
-// HTML5 drag-and-drop fallback (desktop only)
-const cw = document.getElementById('chartWrap');
-cw.addEventListener('dragover',  e => { e.preventDefault(); cw.classList.add('over'); });
-cw.addEventListener('dragleave', () => cw.classList.remove('over'));
-cw.addEventListener('drop', e => {
-  e.preventDefault(); cw.classList.remove('over');
-  const pid = e.dataTransfer.getData('text/plain');
-  if (pid) { chartData.set(pid, clientToChartDeg(e.clientX, e.clientY)); render(); }
-});
-
-/* ══════════════════════════════════════════════
-   TOUCH EVENTS (mobile)
-
-   All three listeners are on `document`, capture
-   phase, passive:false — this is the only way to
-   reliably call preventDefault() and win the
-   gesture race against the browser's scroll.
-
-   We call preventDefault() ONLY when our drag is
-   active, so normal page scroll works everywhere
-   else (body has touch-action:pan-y as fallback).
-══════════════════════════════════════════════ */
-document.addEventListener('touchstart',  onTouchStart,  { capture:true, passive:false });
-document.addEventListener('touchmove',   onTouchMove,   { capture:true, passive:false });
-document.addEventListener('touchend',    onTouchEnd,    { capture:true, passive:false });
-document.addEventListener('touchcancel', onTouchCancel, { capture:true, passive:false });
-
-function findTouch(list, id) {
-  for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
-  return null;
-}
-
-function onTouchStart(e) {
-  // Only handle a fresh single-touch (ignore if drag already active)
-  if (drag.active) return;
-
-  const t = e.changedTouches[0];
-  const tgt = document.elementFromPoint(t.clientX, t.clientY);
-  if (!tgt) return;
-
-  // ── Is the touch on a bank card? ──────────────
-  const card = tgt.closest('.pcard');
-  if (card && !card.classList.contains('used')) {
-    e.preventDefault();                      // block scroll immediately
-    drag.touchId = t.identifier;
-    beginDrag('bank', card.dataset.pid, t.clientX, t.clientY);
-    return;
-  }
-
-  // ── Is the touch on a placed planet glyph? ───
-  // Walk up from tgt through SVG element hierarchy
-  let node = tgt;
-  while (node && node !== document.body) {
-    if (node.classList && node.classList.contains('p-glyph')) {
-      const pid = node.getAttribute('data-pid');
-      if (pid && chartData.has(pid)) {
-        // Double-tap to remove
-        const now = Date.now();
-        const prev = drag.lastTap.get(pid) || 0;
-        drag.lastTap.set(pid, now);
-        if (now - prev < 350) {
-          e.preventDefault();
-          chartData.delete(pid);
-          drag.lastTap.delete(pid);
-          render();
-          return;
-        }
-        // Single tap → begin drag
-        e.preventDefault();                  // block scroll immediately
-        drag.touchId = t.identifier;
-        beginDrag('chart', pid, t.clientX, t.clientY);
-        return;
-      }
+    function showTip(text, x, y) {
+        clearTimeout(tipTO);
+        tipEl.textContent = text;
+        tipEl.classList.add("visible");
+        moveTip(x, y);
     }
-    node = node.parentNode;
-  }
-  // Touch on something else — don't intercept, let page scroll normally
-}
+    function moveTip(x, y) {
+        // Temporarily place offscreen to measure natural width
+        tipEl.style.left = "-9999px";
+        tipEl.style.top  = "-9999px";
+        const tw = tipEl.offsetWidth;
+        const th = tipEl.offsetHeight;
+        let tx = x + 14;
+        let ty = y - th - 10;
+        if (tx + tw > window.innerWidth - 8)  tx = x - tw - 14;
+        if (ty < 8)                             ty = y + 16;
+        tipEl.style.left = tx + "px";
+        tipEl.style.top  = ty + "px";
+    }
+    function hideTip(delay) {
+        clearTimeout(tipTO);
+        tipTO = setTimeout(() => tipEl.classList.remove("visible"), delay ?? 0);
+    }
 
-function onTouchMove(e) {
-  if (!drag.active) return;
-  const t = findTouch(e.touches, drag.touchId);
-  if (!t) return;
-  e.preventDefault();                        // keep blocking scroll while dragging
-  updateDrag(t.clientX, t.clientY);
-}
+    // ── SVG helpers ───────────────────────────────────────────────────────────
+    function degToRad(d) { return d * Math.PI / 180; }
+    function pt(r, a)    { return { x: CENTER + r * Math.cos(a), y: CENTER + r * Math.sin(a) }; }
 
-function onTouchEnd(e) {
-  if (!drag.active) return;
-  const t = findTouch(e.changedTouches, drag.touchId);
-  if (!t) return;
-  e.preventDefault();
-  commitDrag(t.clientX, t.clientY);
-}
+    function createSVGEl(tag, attrs) {
+        const el = document.createElementNS(svgNS, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        return el;
+    }
 
-function onTouchCancel() {
-  if (drag.active) abortDrag();
-}
+    function addSVGText(val, r, a, cls, parent) {
+        const p = pt(r, a);
+        const t = createSVGEl("text", {
+            x: p.x, y: p.y, class: cls,
+            "text-anchor": "middle", "dominant-baseline": "middle"
+        });
+        t.textContent = val;
+        parent.appendChild(t);
+        return t;
+    }
 
-/* ── ASC selector ────────────────────────────── */
-document.getElementById('ascSelect').addEventListener('change', e => {
-  ASC_SIGN_INDEX = parseInt(e.target.value);
-  buildChart();
-  render();
-});
+    // ── Convert screen coords → chart {house, degree} ─────────────────────────
+    function clientToChartPos(clientX, clientY) {
+        const rect   = dropzone.getBoundingClientRect();
+        const scaleX = VIEWBOX_SIZE / rect.width;
+        const scaleY = VIEWBOX_SIZE / rect.height;
+        const vbX    = (clientX - rect.left) * scaleX;
+        const vbY    = (clientY - rect.top)  * scaleY;
+        let   angle  = Math.atan2(vbY - CENTER, vbX - CENTER) * (180 / Math.PI) + ASC_OFFSET;
+        angle        = ((angle % 360) + 360) % 360;
+        return {
+            house:  Math.floor(angle / 30),
+            degree: parseFloat((angle % 30).toFixed(1))
+        };
+    }
 
-/* ── Clear ───────────────────────────────────── */
-document.getElementById('clearBtn').addEventListener('click', () => {
-  chartData.clear(); render();
-});
+    function isOverDropzone(clientX, clientY) {
+        const r = dropzone.getBoundingClientRect();
+        return clientX >= r.left && clientX <= r.right &&
+               clientY >= r.top  && clientY <= r.bottom;
+    }
 
-/* ── Boot ────────────────────────────────────── */
-buildChart();
-render();
+    // ── Init chart drawing ────────────────────────────────────────────────────
+    function init() {
+        const ticksG  = document.getElementById("ticks-layer");
+        const housesG = document.getElementById("houses-layer");
+        const zodiacG = document.getElementById("zodiac-layer");
 
+        // Degree tick marks
+        for (let d = 0; d < 360; d++) {
+            const a   = degToRad(d - ASC_OFFSET);
+            const maj = d % 30 === 0;
+            const mid = d % 5  === 0;
+            const len = maj ? 12 : (mid ? 7 : 4);
+            ticksG.appendChild(createSVGEl("line", {
+                x1: pt(OUTER_R, a).x,         y1: pt(OUTER_R, a).y,
+                x2: pt(OUTER_R - len, a).x,   y2: pt(OUTER_R - len, a).y,
+                class: maj ? "tick-major" : "tick-line"
+            }));
+        }
+
+        // 12 house sectors
+        for (let i = 0; i < 12; i++) {
+            const sA   = degToRad(i * 30 - ASC_OFFSET);
+            const eA   = degToRad((i + 1) * 30 - ASC_OFFSET);
+            const midA = degToRad(i * 30 + 15 - ASC_OFFSET);
+            const p0 = pt(OUTER_R, sA), p1 = pt(OUTER_R, eA);
+            const p2 = pt(INNER_R, eA), p3 = pt(INNER_R, sA);
+
+            housesG.appendChild(createSVGEl("path", {
+                d: `M${p0.x},${p0.y} A${OUTER_R},${OUTER_R} 0 0 1 ${p1.x},${p1.y}` +
+                   `L${p2.x},${p2.y} A${INNER_R},${INNER_R} 0 0 0 ${p3.x},${p3.y}Z`,
+                class: i % 2 === 0 ? "house-sector" : "house-sector-alt"
+            }));
+
+            // Divider spoke
+            housesG.appendChild(createSVGEl("line", {
+                x1: pt(INNER_R, sA).x, y1: pt(INNER_R, sA).y,
+                x2: pt(OUTER_R, sA).x, y2: pt(OUTER_R, sA).y,
+                class: "tick-major"
+            }));
+
+            // House number
+            addSVGText(i + 1, INNER_R + 18, midA, "house-num", housesG);
+
+            // Zodiac symbol (interactive)
+            const zx = pt(OUTER_R + 22, midA).x;
+            const zy = pt(OUTER_R + 22, midA).y;
+            const zTxt = createSVGEl("text", {
+                x: zx, y: zy, class: "zodiac-text",
+                "text-anchor": "middle", "dominant-baseline": "middle"
+            });
+            zTxt.textContent = ZODIAC_SYM[i];
+            // Mouse tooltip
+            zTxt.addEventListener("mouseenter", (e) => showTip(ZODIAC_NAMES[i], e.clientX, e.clientY));
+            zTxt.addEventListener("mousemove",  (e) => moveTip(e.clientX, e.clientY));
+            zTxt.addEventListener("mouseleave", () => hideTip(80));
+            zodiacG.appendChild(zTxt);
+        }
+
+        // ASC marker
+        const ascA = degToRad(-ASC_OFFSET);
+        zodiacG.appendChild(createSVGEl("line", {
+            x1: pt(INNER_R - 4, ascA).x, y1: pt(INNER_R - 4, ascA).y,
+            x2: pt(OUTER_R + 4, ascA).x, y2: pt(OUTER_R + 4, ascA).y,
+            stroke: "#c0392b", "stroke-width": "2"
+        }));
+        addSVGText("ASC", OUTER_R + 38, ascA, "asc-label", zodiacG);
+    }
+
+    // ── Render placed planets ─────────────────────────────────────────────────
+    function render() {
+        const layer = document.getElementById("planets-layer");
+        layer.innerHTML = "";
+
+        // Update bank button states
+        document.querySelectorAll(".planet-btn").forEach(btn => {
+            const placed = chartState.has(btn.dataset.id);
+            btn.classList.toggle("placed", placed);
+            // Keep dragging visual while gesture is active
+            btn.classList.toggle("dragging",
+                gesture.mode === "drag-from-bank" && gesture.planetId === btn.dataset.id);
+        });
+
+        // Group nearby planets for stacking (avoid exact overlap)
+        const posIndex = new Map();
+
+        chartState.forEach((data, id) => {
+            const totalDeg = data.house * 30 + data.degree;
+            // Bucket by 3-degree slots for stacking
+            const key = Math.floor(totalDeg / 3);
+            const idx = posIndex.get(key) || 0;
+            posIndex.set(key, idx + 1);
+
+            const radius = MID_R + idx * 22;
+            const angle  = degToRad(totalDeg - ASC_OFFSET);
+            const pos    = pt(radius, angle);
+            const lblPos = pt(radius + 20, angle);
+
+            const g = document.createElementNS(svgNS, "g");
+
+            // Planet glyph
+            const pTxt = createSVGEl("text", { x: pos.x, y: pos.y, class: `chart-planet c-${id}` });
+            pTxt.textContent = SYMBOLS[id];
+
+            // Degree label
+            const dTxt = createSVGEl("text", { x: lblPos.x, y: lblPos.y, class: "degree-label" });
+            dTxt.textContent = `${Math.floor(data.degree)}°`;
+
+            // Mouse hover tooltip
+            const makeTipText = () =>
+                `${PLANET_NAMES[id]}  ·  ${ZODIAC_NAMES[data.house]}  ${Math.floor(data.degree)}°`;
+
+            pTxt.addEventListener("mouseenter", (e) => showTip(makeTipText(), e.clientX, e.clientY));
+            pTxt.addEventListener("mousemove",  (e) => moveTip(e.clientX, e.clientY));
+            pTxt.addEventListener("mouseleave", () => hideTip(80));
+
+            // Mouse double-click to remove
+            pTxt.addEventListener("dblclick", () => {
+                hideTip();
+                chartState.delete(id);
+                render();
+            });
+
+            // Mouse scrub (mousedown → mousemove)
+            pTxt.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                hideTip();
+                startMouseScrub(id, data, e.clientX);
+            });
+
+            g.appendChild(dTxt);
+            g.appendChild(pTxt);
+            layer.appendChild(g);
+        });
+    }
+
+    // ── Mouse scrub ───────────────────────────────────────────────────────────
+    function startMouseScrub(id, data, startX) {
+        const startDeg = data.degree;
+        let   moved    = false;
+
+        const onMove = (e) => {
+            e.preventDefault();
+            moved = true;
+            data.degree = clampDegree(startDeg + (e.clientX - startX) / 3);
+            render();
+        };
+        const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup",   onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup",   onUp);
+    }
+
+    function clampDegree(d) { return Math.max(0.0, Math.min(29.9, d)); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  UNIFIED TOUCH SYSTEM
+    //  One touchstart on the whole document (capture phase) + one touchmove +
+    //  one touchend. This is the only reliable way to:
+    //    • prevent page scroll while dragging from bank → chart
+    //    • prevent page scroll while scrubbing a placed planet
+    //    • still allow normal page scroll everywhere else
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // We need a persistent touch identifier so we can ignore extra fingers
+    let activeTouchId = null;
+
+    document.addEventListener("touchstart", onTouchStart, { passive: false });
+    document.addEventListener("touchmove",  onTouchMove,  { passive: false });
+    document.addEventListener("touchend",   onTouchEnd,   { passive: false });
+    document.addEventListener("touchcancel",onTouchEnd,   { passive: false });
+
+    function getTouchById(touches, id) {
+        for (let i = 0; i < touches.length; i++) {
+            if (touches[i].identifier === id) return touches[i];
+        }
+        return null;
+    }
+
+    function onTouchStart(e) {
+        // If a gesture is already running, ignore new fingers
+        if (gesture.mode !== null) return;
+
+        const touch = e.changedTouches[0];
+        const target = touch.target;
+
+        // ── Case 1: Touching a planet bank button ────────────────────────────
+        const btn = target.closest(".planet-btn");
+        if (btn && !btn.classList.contains("placed")) {
+            // Prevent scroll immediately — we're starting a drag
+            e.preventDefault();
+            activeTouchId     = touch.identifier;
+            gesture.mode      = "drag-from-bank";
+            gesture.planetId  = btn.dataset.id;
+            gesture.startX    = touch.clientX;
+            gesture.moved     = false;
+
+            // Show ghost at finger position
+            ghost.textContent = SYMBOLS[gesture.planetId];
+            ghost.style.left  = touch.clientX + "px";
+            ghost.style.top   = touch.clientY + "px";
+            ghost.style.display = "block";
+
+            // Dim the source button
+            render();
+            return;
+        }
+
+        // ── Case 2: Touching a placed planet on the chart (scrub / remove) ──
+        // SVG text elements don't have .closest(), walk up manually
+        let el = target;
+        let planetId = null;
+        while (el && el !== document.body) {
+            if (el.classList && el.classList.contains("chart-planet")) {
+                // Extract id from class list: "chart-planet c-sun" → "sun"
+                for (const cls of el.classList) {
+                    if (cls.startsWith("c-") && cls !== "chart-planet") {
+                        planetId = cls.slice(2);
+                        break;
+                    }
+                }
+                break;
+            }
+            el = el.parentElement;
+        }
+
+        if (planetId && chartState.has(planetId)) {
+            // Prevent scroll — we're scrubbing
+            e.preventDefault();
+            activeTouchId     = touch.identifier;
+            gesture.mode      = "scrub";
+            gesture.planetId  = planetId;
+            gesture.startX    = touch.clientX;
+            gesture.startDeg  = chartState.get(planetId).degree;
+            gesture.moved     = false;
+
+            // Show tooltip for context
+            const data = chartState.get(planetId);
+            showTip(
+                `${PLANET_NAMES[planetId]}  ·  ${ZODIAC_NAMES[data.house]}  ${Math.floor(data.degree)}°`,
+                touch.clientX, touch.clientY
+            );
+        }
+        // Everything else: do nothing, let the browser scroll normally
+    }
+
+    function onTouchMove(e) {
+        if (gesture.mode === null) return;
+
+        const touch = getTouchById(e.changedTouches, activeTouchId) ||
+                      getTouchById(e.touches, activeTouchId);
+        if (!touch) return;
+
+        // Always prevent scroll while a gesture is active
+        e.preventDefault();
+        gesture.moved = true;
+
+        const cx = touch.clientX;
+        const cy = touch.clientY;
+
+        if (gesture.mode === "drag-from-bank") {
+            // Move ghost
+            ghost.style.left = cx + "px";
+            ghost.style.top  = cy + "px";
+            // Highlight chart if finger is over it
+            dropzone.classList.toggle("drag-over", isOverDropzone(cx, cy));
+
+        } else if (gesture.mode === "scrub") {
+            const data = chartState.get(gesture.planetId);
+            if (data) {
+                data.degree = clampDegree(gesture.startDeg + (cx - gesture.startX) / 3);
+                // Update tooltip live
+                hideTip(0);
+                showTip(
+                    `${PLANET_NAMES[gesture.planetId]}  ·  ${ZODIAC_NAMES[data.house]}  ${Math.floor(data.degree)}°`,
+                    cx, cy
+                );
+                render();
+            }
+        }
+    }
+
+    function onTouchEnd(e) {
+        if (gesture.mode === null) return;
+
+        const touch = getTouchById(e.changedTouches, activeTouchId);
+        if (!touch) return;
+
+        e.preventDefault(); // prevent ghost click / tap events
+
+        const cx = touch.clientX;
+        const cy = touch.clientY;
+
+        if (gesture.mode === "drag-from-bank") {
+            // Hide ghost
+            ghost.style.display = "none";
+            dropzone.classList.remove("drag-over");
+
+            if (isOverDropzone(cx, cy)) {
+                chartState.set(gesture.planetId, clientToChartPos(cx, cy));
+            }
+
+        } else if (gesture.mode === "scrub") {
+            hideTip(1200);
+
+            if (!gesture.moved) {
+                // It was a tap, not a scrub — check for double-tap removal
+                const now = Date.now();
+                const lastTap = tapTimestamps.get(gesture.planetId) || 0;
+                if (now - lastTap < 350) {
+                    chartState.delete(gesture.planetId);
+                    hideTip(0);
+                }
+                tapTimestamps.set(gesture.planetId, now);
+            }
+        }
+
+        // Reset gesture
+        gesture.mode     = null;
+        gesture.planetId = null;
+        gesture.moved    = false;
+        activeTouchId    = null;
+
+        render();
+    }
+
+    // Tracks last tap time per planet for double-tap detection
+    const tapTimestamps = new Map();
+
+    // ── Desktop Drag & Drop (mouse) ───────────────────────────────────────────
+    document.querySelectorAll(".planet-btn").forEach(btn => {
+        btn.setAttribute("draggable", "true");
+        btn.addEventListener("dragstart", (e) => {
+            e.dataTransfer.setData("text/plain", btn.dataset.id);
+            e.dataTransfer.effectAllowed = "copy";
+        });
+    });
+
+    dropzone.addEventListener("dragover",  (e) => { e.preventDefault(); dropzone.classList.add("drag-over"); });
+    dropzone.addEventListener("dragleave", ()  => dropzone.classList.remove("drag-over"));
+    dropzone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("drag-over");
+        const id = e.dataTransfer.getData("text/plain");
+        if (!id) return;
+        chartState.set(id, clientToChartPos(e.clientX, e.clientY));
+        render();
+    });
+
+    // ── Reset button ──────────────────────────────────────────────────────────
+    document.getElementById("resetBtn").addEventListener("click", () => {
+        chartState.clear();
+        render();
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    init();
+    render();
 })();
 </script>
 </body>
